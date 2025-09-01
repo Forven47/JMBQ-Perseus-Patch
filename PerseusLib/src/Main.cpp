@@ -1,3 +1,5 @@
+// main.cpp (modified)
+// --- existing includes and code preserved ---
 #include <android/log.h>
 #include <cstring>
 #include <dlfcn.h>
@@ -11,6 +13,7 @@
 #include <type_traits>
 #include <unistd.h>
 #include <vector>
+#include <chrono>
 
 #include "Includes/obfuscate.h"
 #include "Includes/Logger.h"
@@ -167,6 +170,47 @@ std::string getKeyValue(const std::string &line, const std::string &key) {
     return value;
 }
 
+// -----------------------------------------------------------------------------
+// New helper: wait_for_global_table
+// Wait for a Lua global (by name) to exist (non-nil) on the given lua_State.
+// Uses existing lua_getglobal, lua_type, lua_gettop, lua_settop function pointers which are resolved in loadluafuncs().
+// Returns true if the global exists within max_ms; false if timed out.
+// Logs progress via percyLog.
+static bool wait_for_global_table(lua_State *L, const char *name, int max_ms = 15000, int poll_ms = 200) {
+    int waited = 0;
+    int attempt = 0;
+    while (waited < max_ms) {
+        ++attempt;
+        // Save stack top
+        int top = lua_gettop(L);
+
+        // Push global 'name' onto stack
+        lua_getglobal(L, STR(name));
+
+        // Check its type: LUA_TNIL == 0 in standard Lua C API; we use lua_type pointer resolved earlier
+        int t = lua_type(L, -1);
+        bool exists = (t != 0);
+
+        // Restore stack
+        lua_settop(L, top);
+
+        percyLog("Perseus: wait_for_global_table('%s') attempt %d top=%d exists=%d", name, attempt, top, exists ? 1 : 0);
+
+        if (exists) {
+            return true;
+        }
+
+        // Sleep then retry
+        usleep(poll_ms * 1000);
+        waited += poll_ms;
+    }
+
+    percyLog("Perseus: wait_for_global_table('%s') timed out after %d ms", name, max_ms);
+    return false;
+}
+
+// -----------------------------------------------------------------------------
+// loadil2cppfuncs, getFunctionAddress, loadluafuncs, etc. (unchanged, except preserved)
 void loadil2cppfuncs() {
     // populate all il2cpp functions with null checks
     il2cpp_domain_get = (Il2CppDomain * (*)()) GETSYM(targetLibName, "il2cpp_domain_get");
@@ -268,7 +312,6 @@ Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *meth
     return imethod->methodPointer;
 }
 
-
 void loadluafuncs() {
     // Attempt to get the first function. If it fails, the class is likely missing.
     lua_newthread = (lua_State * (*)(lua_State *)) GETLUAFUNC("lua_newthread");
@@ -277,7 +320,7 @@ void loadluafuncs() {
         g_lua_funcs_loaded = false;
         return;
     }
-    
+
     percyLog("Perseus: Found 'LuaInterface.LuaDLL', loading all Lua functions...");
 
     // populate other lua funcs
@@ -316,7 +359,7 @@ void loadluafuncs() {
     lua_checkstack = (int (*)(lua_State *, int))GETLUAFUNC("lua_checkstack");
 
     luaL_getmetafield = (int (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("luaL_getmetafield");
-    
+
     // Final check on a few critical functions
     if (!lua_getfield || !lua_pcall || !lua_setfield) {
         percyLog("Perseus: WARNING - Some essential Lua functions could not be loaded even though the class was found. Disabling features.");
@@ -763,7 +806,7 @@ int wvHook(lua_State *L) {
 void modMisc(lua_State *L) {
     lua_pushcfunction(L, wvHook);
     lua_setglobal(L, STR("wordVer"));
-    
+
     if (config.Misc.ExerciseGodmode) {
         lua_getfield(L, -1, STR("ConvertedBuff"));
         lua_getfield(L, -1, STR("buff_19"));
@@ -1151,50 +1194,125 @@ int hookBUAddBuff(lua_State *L) {
 
 const char *(*old_lua_tolstring)(lua_State *instance, int index, int &strLen);
 
+// -----------------------------------------------------------------------------
+// Modified injection point: lua_tolstring
 const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
     if (instance && !exec) {
-        exec = true;
-        percyLog(OBFUSCATE("injecting features into lua state"));
+        percyLog("Perseus: injection attempt started (instance=%p)", instance);
 
+        // create a new thread from the current lua state to do injection work
         lua_State *nL = lua_newthread(instance);
-        lua_getglobal(nL, STR("pg"));
-
-        lua_getglobal(nL, STR("CheaterMarkCommand"));
-        lua_pushcfunction(nL, nilFunc);
-        lua_setfield(nL, -2, STR("execute"));
-        lua_pop(nL, 1);
-
-        lua_getglobal(nL, STR("ActivityBossSceneTemplate"));
-        lua_pushcfunction(nL, hookCommitCombat);
-        lua_setfield(nL, -2, STR("commitCombat"));
-        lua_pop(nL, 1);
-
-        lua_getglobal(nL, STR("ActivityBossSceneTemplate"));
-        lua_pushcfunction(nL, hookCommitTrybat);
-        lua_setfield(nL, -2, STR("commitTrybat"));
-        lua_pop(nL, 1);
-
-        modSpoof(nL);
-        parseLv(nL, config.Spoof.lv);
-
-        if (config.Aircraft.Enabled) {
-            modAircraft(nL);
-        }
-        if (config.Enemies.Enabled) {
-            modEnemies(nL);
-        }
-        if (config.Misc.Enabled) {
-            modMisc(nL);
-        }
-        if (config.Weapons.Enabled) {
-            modWeapons(nL);
+        if (!nL) {
+            percyLog("Perseus: lua_newthread returned NULL, aborting injection attempt");
+            return old_lua_tolstring(instance, index, strLen);
         }
 
-        percyLog(OBFUSCATE("injection finished"));
+        // log current stack top before doing anything
+        int top_before = lua_gettop(nL);
+        percyLog("Perseus: before injection, new thread L=%p top=%d", nL, top_before);
+
+        // Wait for the 'pg' global to be present (required for many later operations)
+        if (!wait_for_global_table(nL, "pg", 15000, 200)) {
+            percyLog("Perseus: 'pg' global not ready yet - aborting injection this attempt");
+            // do not set exec true; we'll try again on next lua_tolstring call
+            return old_lua_tolstring(instance, index, strLen);
+        }
+
+        // Optionally wait for 'Net' if you rely on network table existence (shorter timeout)
+        if (!wait_for_global_table(nL, "Net", 5000, 200)) {
+            percyLog("Perseus: 'Net' global not found within 5s - continuing injection cautiously");
+            // we continue, but log this; some features may require Net and will fail later
+        }
+
+        // Now that pg exists, perform the injection actions (kept same as original)
+        // NOTE: we set exec=true only AFTER successful injection to avoid partial injection
+        bool injection_ok = true;
+        try {
+            // perform the previous injection steps, with additional top logs between groups
+            percyLog("Perseus: injecting features into lua state (start)");
+
+            // Save stack top so we can verify restoration
+            int top_mid = lua_gettop(nL);
+            percyLog("Perseus: top before modifications = %d", top_mid);
+
+            lua_State *tmpL = nL; // alias to match original variable names
+
+            lua_getglobal(tmpL, STR("pg"));
+
+            // Hook: CheaterMarkCommand.execute = nilFunc
+            lua_getglobal(tmpL, STR("CheaterMarkCommand"));
+            if (lua_type(tmpL, -1) != 0) {
+                lua_pushcfunction(tmpL, nilFunc);
+                lua_setfield(tmpL, -2, STR("execute"));
+            } else {
+                percyLog("Perseus: CheaterMarkCommand is nil - skipping its hook");
+            }
+            lua_pop(tmpL, 1);
+
+            // ActivityBossSceneTemplate.commitCombat & commitTrybat
+            lua_getglobal(tmpL, STR("ActivityBossSceneTemplate"));
+            if (lua_type(tmpL, -1) != 0) {
+                lua_pushcfunction(tmpL, hookCommitCombat);
+                lua_setfield(tmpL, -2, STR("commitCombat"));
+            } else {
+                percyLog("Perseus: ActivityBossSceneTemplate is nil - skipping commitCombat hook");
+            }
+            lua_pop(tmpL, 1);
+
+            lua_getglobal(tmpL, STR("ActivityBossSceneTemplate"));
+            if (lua_type(tmpL, -1) != 0) {
+                lua_pushcfunction(tmpL, hookCommitTrybat);
+                lua_setfield(tmpL, -2, STR("commitTrybat"));
+            } else {
+                percyLog("Perseus: ActivityBossSceneTemplate is nil - skipping commitTrybat hook");
+            }
+            lua_pop(tmpL, 1);
+
+            // Run modulessafely with logs
+            percyLog("Perseus: running modSpoof and parseLv");
+            modSpoof(tmpL);
+            parseLv(tmpL, config.Spoof.lv);
+
+            if (config.Aircraft.Enabled) {
+                percyLog("Perseus: applying modAircraft");
+                modAircraft(tmpL);
+            }
+            if (config.Enemies.Enabled) {
+                percyLog("Perseus: applying modEnemies");
+                modEnemies(tmpL);
+            }
+            if (config.Misc.Enabled) {
+                percyLog("Perseus: applying modMisc");
+                modMisc(tmpL);
+            }
+            if (config.Weapons.Enabled) {
+                percyLog("Perseus: applying modWeapons");
+                modWeapons(tmpL);
+            }
+
+            // verify stack restored / consistent
+            int top_after = lua_gettop(tmpL);
+            percyLog("Perseus: injection modifications done, top after = %d (before was %d)", top_after, top_mid);
+
+            // mark injection success
+            exec = true;
+            percyLog("Perseus: injection finished successfully; exec flag set");
+
+        } catch (...) {
+            injection_ok = false;
+            percyLog("Perseus: exception during injection (caught), aborting injection attempt");
+        }
+
+        if (!injection_ok) {
+            percyLog("Perseus: injection failed - will retry on next opportunity");
+            // leave exec false so a later lua_tolstring call can retry
+            return old_lua_tolstring(instance, index, strLen);
+        }
     }
     return old_lua_tolstring(instance, index, strLen);
 }
 
+// -----------------------------------------------------------------------------
 // thread where everything is ran
 void *hack_thread(void *) {
     // check if target lib is loaded
@@ -1228,7 +1346,7 @@ void *hack_thread(void *) {
         percyLog("Perseus: FATAL - Could not find lua_tolstring address, cannot install hook.");
         return nullptr;
     }
-    
+
     percyLog("Perseus: All checks passed. Proceeding with hook setup.");
     hook(lua_tolstring_addr, (void *)lua_tolstring, (void **)&old_lua_tolstring);
 
