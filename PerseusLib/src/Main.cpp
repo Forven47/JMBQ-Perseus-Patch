@@ -1,5 +1,3 @@
-// main.cpp (modified)
-// --- existing includes and code preserved ---
 #include <android/log.h>
 #include <cstring>
 #include <dlfcn.h>
@@ -28,7 +26,6 @@
 #include "modules/command.hpp"
 #include "modules/spoof.hpp"
 
-// Target lib here
 #define targetLibName OBFUSCATE("libil2cpp.so")
 #define tostr(x) (static_cast<std::string>(x))
 #define stdstr(x) (static_cast<std::string>(OBFUSCATE(x)))
@@ -170,12 +167,6 @@ std::string getKeyValue(const std::string &line, const std::string &key) {
     return value;
 }
 
-// -----------------------------------------------------------------------------
-// New helper: wait_for_global_table
-// Wait for a Lua global (by name) to exist (non-nil) on the given lua_State.
-// Uses existing lua_getglobal, lua_type, lua_gettop, lua_settop function pointers which are resolved in loadluafuncs().
-// Returns true if the global exists within max_ms; false if timed out.
-// Logs progress via percyLog.
 static bool wait_for_global_table(lua_State *L, const char *name, int max_ms = 15000, int poll_ms = 200) {
     int waited = 0;
     int attempt = 0;
@@ -184,8 +175,9 @@ static bool wait_for_global_table(lua_State *L, const char *name, int max_ms = 1
         // Save stack top
         int top = lua_gettop(L);
 
-        // Push global 'name' onto stack
-        lua_getglobal(L, STR(name));
+        // Push global 'name' onto stack (use dynamic il2cpp_string_new for runtime name)
+        Il2CppString *tmpName = il2cpp_string_new((char *)name);
+        lua_getglobal(L, tmpName);
 
         // Check its type: LUA_TNIL == 0 in standard Lua C API; we use lua_type pointer resolved earlier
         int t = lua_type(L, -1);
@@ -209,8 +201,6 @@ static bool wait_for_global_table(lua_State *L, const char *name, int max_ms = 1
     return false;
 }
 
-// -----------------------------------------------------------------------------
-// loadil2cppfuncs, getFunctionAddress, loadluafuncs, etc. (unchanged, except preserved)
 void loadil2cppfuncs() {
     // populate all il2cpp functions with null checks
     il2cpp_domain_get = (Il2CppDomain * (*)()) GETSYM(targetLibName, "il2cpp_domain_get");
@@ -231,17 +221,6 @@ void loadil2cppfuncs() {
     il2cpp_string_new = (Il2CppString * (*)(char *)) GETSYM(targetLibName, "il2cpp_string_new");
     if (!il2cpp_string_new) { percyLog("Perseus: failed to find il2cpp_string_new"); return; }
 
-    /*
-    // call the functions necessary to get the image
-    Il2CppDomain *domain = il2cpp_domain_get();
-    if (!domain) { percyLog("Perseus: il2cpp_domain_get returned NULL"); return; }
-
-    Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp"));
-    if (!assembly) { percyLog("Perseus: il2cpp_domain_assembly_open returned NULL"); return; }
-
-    image = il2cpp_assembly_get_image(assembly);
-    if (!image) { percyLog("Perseus: il2cpp_assembly_get_image returned NULL"); }
-    */
     Il2CppDomain *domain = il2cpp_domain_get();
     if (!domain) { percyLog("Perseus: il2cpp_domain_get returned NULL"); return; }
 
