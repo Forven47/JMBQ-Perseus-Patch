@@ -187,6 +187,7 @@ void loadil2cppfuncs() {
     il2cpp_string_new = (Il2CppString * (*)(char *)) GETSYM(targetLibName, "il2cpp_string_new");
     if (!il2cpp_string_new) { percyLog("Perseus: failed to find il2cpp_string_new"); return; }
 
+    /*
     // call the functions necessary to get the image
     Il2CppDomain *domain = il2cpp_domain_get();
     if (!domain) { percyLog("Perseus: il2cpp_domain_get returned NULL"); return; }
@@ -196,6 +197,54 @@ void loadil2cppfuncs() {
 
     image = il2cpp_assembly_get_image(assembly);
     if (!image) { percyLog("Perseus: il2cpp_assembly_get_image returned NULL"); }
+    */
+    Il2CppDomain *domain = il2cpp_domain_get();
+    if (!domain) { percyLog("Perseus: il2cpp_domain_get returned NULL"); return; }
+
+    typedef const void** (*_il2cpp_domain_get_assemblies)(Il2CppDomain*, size_t*);
+    _il2cpp_domain_get_assemblies il2cpp_domain_get_assemblies = nullptr;
+    il2cpp_domain_get_assemblies = (_il2cpp_domain_get_assemblies) GETSYM(targetLibName, "il2cpp_domain_get_assemblies");
+
+    bool found_image = false;
+    if (il2cpp_domain_get_assemblies) {
+        size_t assembly_count = 0;
+        const void** assemblies = il2cpp_domain_get_assemblies(domain, &assembly_count);
+        percyLog("Perseus: il2cpp_domain_get_assemblies returned %zu assemblies", assembly_count);
+        for (size_t i = 0; i < assembly_count; ++i) {
+            // assemblies[i] is a pointer to Il2CppAssembly
+            Il2CppAssembly* a = (Il2CppAssembly*)assemblies[i];
+            if (!a) continue;
+            Il2CppImage* img = il2cpp_assembly_get_image(a);
+            if (!img) continue;
+            // try to find the class in this image
+            void* k = il2cpp_class_from_name((void*)img, OBFUSCATE("LuaInterface"), OBFUSCATE("LuaDLL"));
+            if (k) {
+                image = img;
+                found_image = true;
+                percyLog("Perseus: Found LuaInterface.LuaDLL in assembly index %zu (using its image).", i);
+                break;
+            }
+        }
+    }
+
+    // Fallback: if enumeration failed or class not found, try opening Assembly-CSharp as before
+    if (!found_image) {
+        percyLog("Perseus: Could not locate LuaInterface.LuaDLL via enumeration, falling back to Assembly-CSharp...");
+        Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp"));
+        if (!assembly) {
+            percyLog("Perseus: il2cpp_domain_assembly_open returned NULL for Assembly-CSharp");
+            // still continue without image: subsequent code will log image null
+            image = nullptr;
+            return;
+        } else {
+            image = il2cpp_assembly_get_image(assembly);
+            if (!image) {
+                percyLog("Perseus: il2cpp_assembly_get_image returned NULL for Assembly-CSharp");
+            } else {
+                percyLog("Perseus: Using Assembly-CSharp image as fallback.");
+            }
+        }
+    }
 }
 
 Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
