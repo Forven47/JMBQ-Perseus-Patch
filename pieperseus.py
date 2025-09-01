@@ -176,7 +176,8 @@ def decompile_apk():
 
 def copy_perseus_libs():
     logging.info('copying Perseus libs')
-    bbox(f'sh -c "cp -r ../PerseusLib/src/libs/* {pkg}/lib"')
+    #bbox(f'sh -c "cp -r ../PerseusLib/src/libs/* {pkg}/lib"')
+    bbox(f'sh -c "cp -r ../oldlib/* {pkg}/lib"')
 
 
 def patch():
