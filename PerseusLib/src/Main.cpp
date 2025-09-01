@@ -40,7 +40,8 @@ std::string configPath;
 std::string skinPath;
 std::map<int, int> skins;
 Config config;
-Il2CppImage *image;
+Il2CppImage *image = nullptr; // Initialize to nullptr
+bool g_lua_funcs_loaded = false; // Global flag for Lua initialization status
 
 const char *lua_tolstring(lua_State *instance, int index, int &strLen);
 Il2CppString *stdstr2ilstr(std::string s) { return il2cpp_string_new((char *)s.c_str()); }
@@ -167,27 +168,35 @@ std::string getKeyValue(const std::string &line, const std::string &key) {
 }
 
 void loadil2cppfuncs() {
-    // populate all il2cpp functions
+    // populate all il2cpp functions with null checks
     il2cpp_domain_get = (Il2CppDomain * (*)()) GETSYM(targetLibName, "il2cpp_domain_get");
+    if (!il2cpp_domain_get) { percyLog("Perseus: failed to find il2cpp_domain_get"); return; }
+
     il2cpp_domain_assembly_open = (Il2CppAssembly * (*)(void *, char *)) GETSYM(targetLibName, "il2cpp_domain_assembly_open");
+    if (!il2cpp_domain_assembly_open) { percyLog("Perseus: failed to find il2cpp_domain_assembly_open"); return; }
+
     il2cpp_assembly_get_image = (Il2CppImage * (*)(void *)) GETSYM(targetLibName, "il2cpp_assembly_get_image");
+    if (!il2cpp_assembly_get_image) { percyLog("Perseus: failed to find il2cpp_assembly_get_image"); return; }
+
     il2cpp_class_from_name = (void *(*)(void *, char *, char *))GETSYM(targetLibName, "il2cpp_class_from_name");
+    if (!il2cpp_class_from_name) { percyLog("Perseus: failed to find il2cpp_class_from_name"); return; }
+
     il2cpp_class_get_method_from_name = (MethodInfo * (*)(void *, char *, int)) GETSYM(targetLibName, "il2cpp_class_get_method_from_name");
+    if (!il2cpp_class_get_method_from_name) { percyLog("Perseus: failed to find il2cpp_class_get_method_from_name"); return; }
+
     il2cpp_string_new = (Il2CppString * (*)(char *)) GETSYM(targetLibName, "il2cpp_string_new");
+    if (!il2cpp_string_new) { percyLog("Perseus: failed to find il2cpp_string_new"); return; }
 
     // call the functions necessary to get the image
     Il2CppDomain *domain = il2cpp_domain_get();
-    Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp"));
-    image = il2cpp_assembly_get_image(assembly);
-}
+    if (!domain) { percyLog("Perseus: il2cpp_domain_get returned NULL"); return; }
 
-/*
-Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
-    void *iklass = il2cpp_class_from_name(image, namespaze, klass);
-    MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
-    return imethod->methodPointer;
+    Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp"));
+    if (!assembly) { percyLog("Perseus: il2cpp_domain_assembly_open returned NULL"); return; }
+
+    image = il2cpp_assembly_get_image(assembly);
+    if (!image) { percyLog("Perseus: il2cpp_assembly_get_image returned NULL"); }
 }
-*/
 
 Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
     if (!image) {
@@ -210,9 +219,19 @@ Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *meth
     return imethod->methodPointer;
 }
 
+
 void loadluafuncs() {
-    // populate lua funcs
+    // Attempt to get the first function. If it fails, the class is likely missing.
     lua_newthread = (lua_State * (*)(lua_State *)) GETLUAFUNC("lua_newthread");
+    if (!lua_newthread) {
+        percyLog("Perseus: FATAL - Could not find 'LuaInterface.LuaDLL'. Lua functions cannot be loaded. Features will be disabled.");
+        g_lua_funcs_loaded = false;
+        return;
+    }
+    
+    percyLog("Perseus: Found 'LuaInterface.LuaDLL', loading all Lua functions...");
+
+    // populate other lua funcs
     lua_getfield = (void (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("lua_getfield");
     lua_gettable = (void (*)(lua_State *, int))GETLUAFUNC("lua_gettable");
     lua_setfield = (void (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("lua_setfield");
@@ -248,6 +267,16 @@ void loadluafuncs() {
     lua_checkstack = (int (*)(lua_State *, int))GETLUAFUNC("lua_checkstack");
 
     luaL_getmetafield = (int (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("luaL_getmetafield");
+    
+    // Final check on a few critical functions
+    if (!lua_getfield || !lua_pcall || !lua_setfield) {
+        percyLog("Perseus: WARNING - Some essential Lua functions could not be loaded even though the class was found. Disabling features.");
+        g_lua_funcs_loaded = false;
+        return;
+    }
+
+    percyLog("Perseus: All Lua functions loaded successfully.");
+    g_lua_funcs_loaded = true;
 }
 
 void replaceAttributeN(lua_State *L, Il2CppString *attribute, int number) {
@@ -1076,7 +1105,7 @@ const char *(*old_lua_tolstring)(lua_State *instance, int index, int &strLen);
 const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
     if (instance && !exec) {
         exec = true;
-        percyLog(OBFUSCATE("injecting"));
+        percyLog(OBFUSCATE("injecting features into lua state"));
 
         lua_State *nL = lua_newthread(instance);
         lua_getglobal(nL, STR("pg"));
@@ -1112,7 +1141,7 @@ const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
             modWeapons(nL);
         }
 
-        percyLog(OBFUSCATE("injected"));
+        percyLog(OBFUSCATE("injection finished"));
     }
     return old_lua_tolstring(instance, index, strLen);
 }
@@ -1123,12 +1152,36 @@ void *hack_thread(void *) {
     do {
         sleep(3);
     } while (!isLibraryLoaded(targetLibName));
+    percyLog("Perseus: Target library %s loaded.", targetLibName);
 
-    // load necessary functions
+    // load necessary il2cpp functions and get the image
     loadil2cppfuncs();
+
+    // FATAL CHECK 1: If image is null, we can't do anything.
+    if (!image) {
+        percyLog("Perseus: FATAL - Could not get il2cpp image. Aborting thread.");
+        return nullptr;
+    }
+    percyLog("Perseus: Il2cpp image obtained successfully.");
+
+    // Load all lua function pointers. This function has internal checks.
     loadluafuncs();
 
-    hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring);
+    // FATAL CHECK 2: Use the global flag set by loadluafuncs.
+    if (!g_lua_funcs_loaded) {
+        percyLog("Perseus: Aborting hook setup because Lua functions failed to load.");
+        return nullptr;
+    }
+
+    // Get the specific function to hook.
+    void* lua_tolstring_addr = (void*)GETLUAFUNC("lua_tolstring");
+    if (!lua_tolstring_addr) {
+        percyLog("Perseus: FATAL - Could not find lua_tolstring address, cannot install hook.");
+        return nullptr;
+    }
+    
+    percyLog("Perseus: All checks passed. Proceeding with hook setup.");
+    hook(lua_tolstring_addr, (void *)lua_tolstring, (void **)&old_lua_tolstring);
 
     return nullptr;
 }
