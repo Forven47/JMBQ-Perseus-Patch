@@ -181,9 +181,32 @@ void loadil2cppfuncs() {
     image = il2cpp_assembly_get_image(assembly);
 }
 
+/*
 Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
     void *iklass = il2cpp_class_from_name(image, namespaze, klass);
     MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
+    return imethod->methodPointer;
+}
+*/
+
+Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
+    if (!image) {
+        percyLog("Perseus: il2cpp image is NULL");
+        return nullptr;
+    }
+
+    void *iklass = il2cpp_class_from_name(image, namespaze, klass);
+    if (!iklass) {
+        percyLog("Perseus: il2cpp_class_from_name returned NULL for %s.%s", namespaze ? namespaze : "?", klass ? klass : "?");
+        return nullptr;
+    }
+
+    MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
+    if (!imethod) {
+        percyLog("Perseus: il2cpp_class_get_method_from_name returned NULL for %s.%s::%s", namespaze ? namespaze : "?", klass ? klass : "?", method ? method : "?");
+        return nullptr;
+    }
+
     return imethod->methodPointer;
 }
 
