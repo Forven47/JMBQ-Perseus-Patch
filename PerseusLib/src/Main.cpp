@@ -1152,7 +1152,7 @@ void *hack_thread(void *) {
     do {
         sleep(3);
     } while (!isLibraryLoaded(targetLibName));
-    percyLog("Perseus: Target library %s loaded.", targetLibName);
+    percyLog("Perseus: Target library %s loaded.", targetLibName.c_str());
 
     // load necessary il2cpp functions and get the image
     loadil2cppfuncs();
