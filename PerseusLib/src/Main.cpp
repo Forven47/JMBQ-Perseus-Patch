@@ -12,6 +12,11 @@
 #include <unistd.h>
 #include <vector>
 
+// 添加缺失的宏定义
+#ifndef OBFUSCATE
+#define OBFUSCATE(str) str  // 简化版本，实际项目中应使用字符串混淆
+#endif
+
 #include "Includes/Logger.h"
 #include "Includes/Toast.hpp"
 #include "Includes/Utils.h"
@@ -24,7 +29,7 @@
 #include "modules/command.hpp"
 #include "modules/spoof.hpp"
 
-// Target lib here
+// 目标库名称
 #define targetLibName "libil2cpp.so"
 #define GETLUAFUNC(method) getFunctionAddress("LuaInterface", "LuaDLL", method)
 
@@ -163,7 +168,7 @@ std::string getKeyValue(const std::string &line, const std::string &key) {
 }
 
 void loadil2cppfuncs() {
-    // populate all il2cpp functions
+    // 填充所有 il2cpp 函数
     il2cpp_domain_get = (Il2CppDomain * (*)()) GETSYM(targetLibName, "il2cpp_domain_get");
     il2cpp_domain_assembly_open = (Il2CppAssembly * (*)(void *, char *)) GETSYM(targetLibName, "il2cpp_domain_assembly_open");
     il2cpp_assembly_get_image = (Il2CppImage * (*)(void *)) GETSYM(targetLibName, "il2cpp_assembly_get_image");
@@ -171,7 +176,7 @@ void loadil2cppfuncs() {
     il2cpp_class_get_method_from_name = (MethodInfo * (*)(void *, char *, int)) GETSYM(targetLibName, "il2cpp_class_get_method_from_name");
     il2cpp_string_new = (Il2CppString * (*)(char *)) GETSYM(targetLibName, "il2cpp_string_new");
 
-    // call the functions necessary to get the image
+    // 调用必要的函数获取 image
     Il2CppDomain *domain = il2cpp_domain_get();
     Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, "Assembly-CSharp");
     image = il2cpp_assembly_get_image(assembly);
@@ -184,7 +189,7 @@ Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *meth
 }
 
 void loadluafuncs() {
-    // populate lua funcs
+    // 填充 lua 函数
     lua_newthread = (lua_State * (*)(lua_State *)) GETLUAFUNC("lua_newthread");
     lua_getfield = (void (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("lua_getfield");
     lua_gettable = (void (*)(lua_State *, int))GETLUAFUNC("lua_gettable");
@@ -236,17 +241,17 @@ void emptyAttributeT(lua_State *L, Il2CppString *attribute) {
 std::vector<int> getTableIds(lua_State *L) {
     std::vector<int> tableIds;
 
-    // get table "all", where all ids are stored
+    // 获取存储所有ID的"all"表
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("all")));
 
-    // loop it
+    // 遍历表
     lua_pushnil(L);
     while (lua_next(L, -2) != 0) {
         tableIds.push_back((int)lua_tonumber(L, -1));
         lua_pop(L, 1);
     }
 
-    // pop "all" table
+    // 弹出"all"表
     lua_pop(L, 1);
     return tableIds;
 }
@@ -372,7 +377,7 @@ void modEnemies(lua_State *L) {
         lua_pop(L, 1);
     }
 
-    // pop enemy_data_statistics
+    // 弹出 enemy_data_statistics
     lua_pop(L, 1);
 
     if (config.Enemies.RemoveSkill) {
@@ -481,20 +486,20 @@ int hookCommitCombat(lua_State *L);
 int hookCommitTrybat(lua_State *L);
 
 void modSkins(lua_State *L) {
-    // replace SetShipSkinCommand.execute with its hook
+    // 将 SetShipSkinCommand.execute 替换为钩子函数
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("SetShipSkinCommand")));
     lua_pushcfunction(L, hookSetShipSkinCommand);
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("execute")));
     lua_pop(L, 1);
 
-    // replace ShipFashionView.SetSkinList with its hook
+    // 将 ShipFashionView.SetSkinList 替换为钩子函数
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("ShipFashionView")));
     lua_pushcfunction(L, hookSFVSetSkinList);
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("SetSkinList")));
     lua_pop(L, 1);
 
-    // rename Ship's New function (its Ctor) to oldCtor
-    // and set New to wrapShipCtor.
+    // 重命名 Ship 的 New 函数（构造函数）为 oldCtor
+    // 并将 New 设置为 wrapShipCtor
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("Ship")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("New")));
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("oldCtor")));
@@ -502,8 +507,8 @@ void modSkins(lua_State *L) {
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("New")));
     lua_pop(L, 1);
 
-    // replace ShipSkin's SKIN_TYPE_NOT_HAVE_HIDE (by default 4) to 10,
-    // so all its comparisons pass through, thus making "censored" skins visible
+    // 将 ShipSkin 的 SKIN_TYPE_NOT_HAVE_HIDE（默认4）替换为10
+    // 使所有比较通过，从而显示"被审查"的皮肤
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("ShipSkin")));
     replaceAttributeN(L, il2cpp_string_new(const_cast<char*>("SKIN_TYPE_NOT_HAVE_HIDE")), 10);
     lua_pop(L, 1);
@@ -527,7 +532,7 @@ void luaMessageBox(lua_State *L, std::string msg) {
     lua_pushnumber(L, 7); // helpmsg
     lua_settable(L, -3);
 
-    // helps is of type array of table with key `info` in each table
+    // helps 是包含每个表中键 `info` 的数组
     lua_pushstring(L, il2cpp_string_new(const_cast<char*>("helps")));
     lua_createtable(L, 1, 0);
     lua_newtable(L);
@@ -569,13 +574,13 @@ int hookSendMsgExecute(lua_State *L) {
         std::string cmd = msg.substr(1);
         handleCommand(L, cmd);
     } else {
-        // TODO: maybe call the old function
+        // TODO: 可能需要调用原函数
     }
     return 0;
 }
 
 void luaHookFunc(lua_State *L, std::string field, lua_CFunction func, std::string backup_prefix) {
-    // place name of function to be hooked, in the form x.y.z, in a stringstream
+    // 将待挂钩的函数名（形式为 x.y.z）放入字符串流
     std::istringstream luaName(field);
 
     std::string luaObj;
@@ -617,8 +622,8 @@ template <typename T> void luaReplaceAttribute(lua_State *L, const char *key, T 
 }
 
 int hookBMWABSetActive(lua_State *L) {
-    // get old SetActive function and call it with the same arguments, but with
-    // arg2 set to false instead, such that battleship bullet time is not activated
+    // 获取旧的 SetActive 函数并使用相同的参数调用
+    // 但将 arg2 设置为 false，从而不激活战舰子弹时间
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("ys")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("Battle")));
     lua_remove(L, -2);
@@ -700,7 +705,7 @@ void modMisc(lua_State *L) {
         luaHookFunc(L, "FragResolvePanel.GetAllBluePrintStrengthenItems", FRPGetAllBlueprintItemsHook, "old");
     }
 
-    // thanks cmdtaves for the following patches
+    // 感谢 cmdtaves 提供以下补丁
     if (config.Misc.RemoveBBAnimation) {
         luaHookFunc(L, "ys.Battle.BattleManualWeaponAutoBot.SetActive", hookBMWABSetActive, "old");
     }
@@ -741,41 +746,41 @@ void modWeapons(lua_State *L) {
 }
 
 int hookSetShipSkinCommand(lua_State *L) {
-    // calls getBody on slot1, returning a table with shipId and skinId
+    // 调用 slot1 的 getBody，返回包含 shipId 和 skinId 的表
     lua_getfield(L, 2, il2cpp_string_new(const_cast<char*>("getBody")));
     lua_insert(L, -2);
     lua_pcall(L, 1, 1, 0);
 
-    // assigns skinId to a variable and pops it, leaving the stack intact
+    // 将 skinId 赋值给变量并弹出，保持堆栈不变
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("skinId")));
     int skinId = (int)lua_tonumber(L, -1);
     lua_pop(L, 1);
 
-    // assigns shipId to a variable and pops it, leaving the stack intact
+    // 将 shipId 赋值给变量并弹出，保持堆栈不变
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("shipId")));
     int shipId = (int)lua_tonumber(L, -1);
     lua_pop(L, 1);
 
-    // calls getProxy(BayProxy), which returns a table with its functions
+    // 调用 getProxy(BayProxy)，返回包含其函数的表
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("getProxy")));
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("BayProxy")));
     lua_pcall(L, 1, 1, 0);
 
-    // gets the function getShipById from the proxy, shifts it to the left
-    // so that the proxy table from before is passed as its first argument,
-    // pushes shipId and calls the function.
-    // returns the ship table.
+    // 从代理中获取 getShipById 函数，将其左移
+    // 以便之前的代理表作为其第一个参数传递，
+    // 压入 shipId 并调用函数。
+    // 返回 ship 表。
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("getShipById")));
     lua_insert(L, -2);
     lua_pushnumber(L, shipId);
     lua_pcall(L, 2, 1, 0);
 
-    // if skinId is 0, which means default skin
+    // 如果 skinId 为 0，表示默认皮肤
     if (skinId == 0) {
-        // gets the getConfig function from the ship table, pushes a copy
-        // of the ship table onto the top of the stack, as it's needed as first argument,
-        // and pushes "skin_id" as second argument, then calls the function.
-        // returns the ship's default skin id, which replaces the 0 of skinId.
+        // 从 ship 表中获取 getConfig 函数，将
+        // ship 表的副本压入堆栈顶部，作为第一个参数，
+        // 并压入 "skin_id" 作为第二个参数，然后调用函数。
+        // 返回 ship 的默认皮肤 id，替换 skinId 的 0。
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("getConfig")));
         lua_pushvalue(L, -2);
         lua_pushstring(L, il2cpp_string_new(const_cast<char*>("skin_id")));
@@ -784,34 +789,34 @@ int hookSetShipSkinCommand(lua_State *L) {
         lua_pop(L, 1);
     }
 
-    // replaces the ship's skinId attribute with the one saved
+    // 将保存的 skinId 替换 ship 的 skinId 属性
     lua_pushnumber(L, skinId);
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("skinId")));
 
-    // calls getProxy(BayProxy) again
+    // 再次调用 getProxy(BayProxy)
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("getProxy")));
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("BayProxy")));
     lua_pcall(L, 1, 1, 0);
 
-    // gets the function updateShip, shifts it to the left as done before,
-    // pushes a copy of the ship table onto the top of the stack, and calls
-    // the function.
+    // 获取 updateShip 函数，像之前一样左移，
+    // 将 ship 表的副本压入堆栈顶部，并调用
+    // 函数。
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("updateShip")));
     lua_insert(L, -2);
     lua_pushvalue(L, -3);
     lua_pcall(L, 2, 0, 0);
 
-    // calls getProxy(PlayerProxy)
+    // 调用 getProxy(PlayerProxy)
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("getProxy")));
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("PlayerProxy")));
     lua_pcall(L, 1, 1, 0);
 
-    // gets the function sendNotification, shifts it to the left,
-    // gets the global SetShipSkinCommand to get SKIN_UPDATED, then removes
-    // said global, creates a new table, pushes a copy of the ship table onto
-    // the top of the stack to assign it to the key "ship" of the table,
-    // and then calls the function.
-    // before calling it, the end of the stack is:
+    // 获取 sendNotification 函数，左移，
+    // 获取全局 SetShipSkinCommand 以获取 SKIN_UPDATED，然后移除
+    // 该全局，创建一个新表，将 ship 表的副本压入
+    // 堆栈顶部，将其赋值给表的键 "ship"，
+    // 然后调用函数。
+    // 调用前，堆栈末尾为：
     // (ship) [sendNotification] [PlayerProxy] [SKIN_UPDATED] [table]
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("sendNotification")));
     lua_insert(L, -2);
@@ -823,11 +828,11 @@ int hookSetShipSkinCommand(lua_State *L) {
     lua_setfield(L, -2, il2cpp_string_new(const_cast<char*>("ship")));
     lua_pcall(L, 3, 0, 0);
 
-    // pops the ship table, as it's not needed anymore
+    // 弹出 ship 表，因为不再需要
     lua_pop(L, 1);
 
-    // gets pg.TipsMgr's GetInstance function, removes pg.TipsMgr from the stack
-    // and calls the function.
+    // 获取 pg.TipsMgr 的 GetInstance 函数，从堆栈中移除 pg.TipsMgr
+    // 并调用函数。
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("pg")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("TipsMgr")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("GetInstance")));
@@ -835,9 +840,9 @@ int hookSetShipSkinCommand(lua_State *L) {
     lua_remove(L, -2);
     lua_pcall(L, 0, 1, 0);
 
-    // gets function ShowTips from GetInstance's table, shifts it to the left,
-    // gets the function i18n and calls it with "ship_set_skin_success", then passes it
-    // as second argument to ShowTips (first being "this") and calls it.
+    // 从 GetInstance 表中获取 ShowTips 函数，左移，
+    // 获取 i18n 函数并用 "ship_set_skin_success" 调用它，然后将其
+    // 作为第二个参数传递给 ShowTips（第一个是 "this"）并调用。
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("ShowTips")));
     lua_insert(L, -2);
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("i18n")));
@@ -860,8 +865,8 @@ int hookSetShipSkinCommand(lua_State *L) {
 }
 
 int hookSFVSetSkinList(lua_State *L) {
-    // sets ShipFashionView.skinList to pg.ship_skin_template.all,
-    // where all skin indexes are stored.
+    // 将 ShipFashionView.skinList 设置为 pg.ship_skin_template.all，
+    // 其中存储了所有皮肤索引。
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("pg")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("ship_skin_template")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("all")));
@@ -873,9 +878,9 @@ int hookSFVSetSkinList(lua_State *L) {
 }
 
 int wrapShipCtor(lua_State *L) {
-    // gets Ship.oldCtor function and calls it using
-    // arg1 and arg2 (slot0, slot1) as arguments.
-    // returns the Ship object.
+    // 获取 Ship.oldCtor 函数并使用
+    // arg1 和 arg2（slot0, slot1）作为参数调用。
+    // 返回 Ship 对象。
     lua_getglobal(L, il2cpp_string_new(const_cast<char*>("Ship")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("oldCtor")));
     lua_remove(L, -2);
@@ -883,13 +888,13 @@ int wrapShipCtor(lua_State *L) {
     lua_pushvalue(L, 2);
     lua_pcall(L, 2, 1, 0);
 
-    // get the Ship's id (unique id, not ship's id).
+    // 获取 Ship 的 id（唯一 id，非 ship 的 id）。
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("id")));
     int shipId = (int)lua_tonumber(L, -1);
     lua_pop(L, 1);
 
-    // search the id on skins, if found, replace
-    // skinId with the skin.
+    // 在 skins 中搜索 id，如果找到，则替换
+    // skinId 为保存的皮肤。
     const auto &ship = skins.find(shipId);
     if (ship != skins.end()) {
         replaceAttributeN(L, il2cpp_string_new(const_cast<char*>("skinId")), ship->second);
@@ -899,15 +904,15 @@ int wrapShipCtor(lua_State *L) {
 }
 
 int hookCommitCombat(lua_State *L) {
-    // get slot0.contextData.editFleet, pass to int and then pop
-    // editFleet.
+    // 获取 slot0.contextData.editFleet，转换为 int 后弹出
+    // editFleet。
     lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("contextData")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("editFleet")));
     int editFleet = (int)lua_tonumber(L, -1);
     lua_pop(L, 1);
 
-    // get normalStageIDs from contextData, which wasn't popped earlier,
-    // pass it to int then pop both.
+    // 从 contextData 获取 normalStageIDs，之前未弹出，
+    // 转换为 int 后弹出两者。
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("normalStageIDs")));
     int normalStageLength = (int)lua_objlen(L, -1);
     lua_pop(L, 2);
@@ -930,9 +935,9 @@ int hookCommitCombat(lua_State *L) {
 
             return 0;
         }
-        // get emit from slot0, push a copy of slot0,
-        // get slot0.contextData.mediatorClass.ON_EX_PRECOMBAT
-        // and remove contextData & mediatorClass.
+        // 从 slot0 获取 emit，压入 slot0 的副本，
+        // 获取 slot0.contextData.mediatorClass.ON_EX_PRECOMBAT
+        // 并移除 contextData & mediatorClass。
         // [emit] [slot0] [ON_EX_PRECOMBAT]
         lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("emit")));
         lua_pushvalue(L, 1);
@@ -942,19 +947,19 @@ int hookCommitCombat(lua_State *L) {
         lua_remove(L, -2);
         lua_remove(L, -2);
 
-        // get contextData.editFleet, remove contextData
-        // and push false to the stack.
+        // 获取 contextData.editFleet，移除 contextData
+        // 并压入 false 到堆栈。
         // [emit] [slot0] [ON_EX_PRECOMBAT] [editFleet] [false]
-        // then call the function
+        // 然后调用函数
         lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("contextData")));
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("editFleet")));
         lua_remove(L, -2);
         lua_pushboolean(L, 0);
         lua_pcall(L, 4, 0, 0);
     } else {
-        // get emit from slot0, push a copy of slot0,
-        // get slot0.contextData.mediatorClass.ON_PRECOMBAT
-        // and remove contextData & mediatorClass.
+        // 从 slot0 获取 emit，压入 slot0 的副本，
+        // 获取 slot0.contextData.mediatorClass.ON_PRECOMBAT
+        // 并移除 contextData & mediatorClass。
         // [emit] [slot0] [ON_PRECOMBAT]
         lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("emit")));
         lua_pushvalue(L, 1);
@@ -964,9 +969,9 @@ int hookCommitCombat(lua_State *L) {
         lua_remove(L, -2);
         lua_remove(L, -2);
 
-        // get contextData.editFleet, and remove contextData,
+        // 获取 contextData.editFleet，并移除 contextData，
         // [emit] [slot0] [ON_EX_PRECOMBAT] [editFleet]
-        // then call the function.
+        // 然后调用函数。
         lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("contextData")));
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("editFleet")));
         lua_remove(L, -2);
@@ -994,9 +999,9 @@ int hookCommitTrybat(lua_State *L) {
 
         return 0;
     }
-    // get emit from slot0, push a copy of slot0,
-    // get slot0.contextData.mediatorClass.ON_EX_PRECOMBAT
-    // and remove contextData & mediatorClass.
+    // 从 slot0 获取 emit，压入 slot0 的副本，
+    // 获取 slot0.contextData.mediatorClass.ON_EX_PRECOMBAT
+    // 并移除 contextData & mediatorClass。
     // [emit] [slot0] [ON_EX_PRECOMBAT]
     lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("emit")));
     lua_pushvalue(L, 1);
@@ -1006,10 +1011,10 @@ int hookCommitTrybat(lua_State *L) {
     lua_remove(L, -2);
     lua_remove(L, -2);
 
-    // get contextData.editFleet, remove contextData
-    // and push false to the stack.
+    // 获取 contextData.editFleet，移除 contextData
+    // 并压入 false 到堆栈。
     // [emit] [slot0] [ON_EX_PRECOMBAT] [editFleet] [false]
-    // then call the function
+    // 然后调用函数
     lua_getfield(L, 1, il2cpp_string_new(const_cast<char*>("contextData")));
     lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("editFleet")));
     lua_remove(L, -2);
@@ -1029,7 +1034,9 @@ int hookBUAddBuff(lua_State *L) {
     if (IFF != FOE_CODE) {
         lua_getglobal(L, il2cpp_string_new(const_cast<char*>("ys")));
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("Battle")));
+        lua_remove(L, -2);
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("BattleUnit")));
+        lua_remove(L, -2);
         lua_getfield(L, -1, il2cpp_string_new(const_cast<char*>("oldAddBuff")));
 
         lua_pushvalue(L, 1);
@@ -1089,14 +1096,14 @@ const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
     return old_lua_tolstring(instance, index, strLen);
 }
 
-// thread where everything is ran
+// 运行所有内容的线程
 void *hack_thread(void *) {
-    // check if target lib is loaded
+    // 检查目标库是否已加载
     do {
         sleep(3);
     } while (!isLibraryLoaded(targetLibName));
 
-    // load necessary functions
+    // 加载必要的函数
     loadil2cppfuncs();
     loadluafuncs();
 
@@ -1146,7 +1153,7 @@ template <typename T> T jsonGetKey(nlohmann::basic_json<nlohmann::ordered_map> o
 }
 
 void init(JNIEnv *env, jclass clazz, jobject context) {
-    // get external path where config shall be located
+    // 获取配置文件所在的外部路径
     getConfigPath(env, context);
 
     if (access(configPath.c_str(), F_OK) != 0) {
