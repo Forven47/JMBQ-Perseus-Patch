@@ -54,7 +54,8 @@ int wrapPVDPUpdateInfo(lua_State *L) {
 
         std::string expTxt = std::to_string(config.Spoof.spoofXp) + stdstr("/") + std::to_string(config.Spoof.lvMax);
         lua_getfield(L, 1, STR("expTxt"));
-        lua_pushstring(L, il2cpp_string_new(expTxt.data()));
+        //lua_pushstring(L, il2cpp_string_new(expTxt.data()));
+        lua_pushstring(L, il2cpp_string_new(const_cast<char*>(expTxt.data())));
         lua_setfield(L, -2, STR("text"));
         lua_pop(L, 1);
     }
@@ -207,18 +208,21 @@ int wrapBDDRVSetFleetVO(lua_State *L) {
             newName = config.Spoof.name;
         }
         lua_pop(L, 1);
-        lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        //lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newName.c_str())));
         lua_setfield(L, -2, STR("name"));
 
         lua_getfield(L, 3, STR("level"));
         if (!needLevelSpoof) {
             int levelNum = lua_tonumber(L, -1);
             std::string newLevel = std::to_string(levelNum);
-            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newLevel.c_str())));
             lua_setfield(L, -2, STR("level"));
         } else {
             std::string newLevel = std::to_string(config.Spoof.lvInt);
-            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newLevel.c_str())));
             lua_setfield(L, -2, STR("level"));
         }
         lua_pop(L, 1);
@@ -297,7 +301,8 @@ int wrapBRLSetPlayer(lua_State *L) {
             newName = config.Spoof.name;
         }
         lua_pop(L, 1);
-        lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        //lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newName.c_str())));
         lua_setfield(L, -2, STR("name"));
 
         // level
@@ -306,12 +311,14 @@ int wrapBRLSetPlayer(lua_State *L) {
             const int levelNum = lua_tonumber(L, -1);
             std::string newLevel = std::to_string(levelNum);
             lua_pop(L, 1);
-            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newLevel.c_str())));
             lua_setfield(L, -2, STR("level"));
         } else {
             std::string newLevel = std::to_string(config.Spoof.lvInt);
             lua_pop(L, 1);
-            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newLevel.c_str())));
             lua_setfield(L, -2, STR("level"));
         }
 
@@ -326,12 +333,14 @@ int wrapBRLSetPlayer(lua_State *L) {
                 else newXP = sxp;
             } else newXP.clear();
             lua_pop(L, 1);
-            lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newXP.c_str())));
             lua_setfield(L, -2, STR("exp"));
         } else {
             std::string newXP = std::to_string(config.Spoof.spoofXp);
             lua_pop(L, 1);
-            lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            //lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newXP.c_str())));
             lua_setfield(L, -2, STR("exp"));
         }
 
@@ -386,7 +395,8 @@ int NBRSPExpManager(lua_State *L) {
     }
     lua_pop(L, 1);
     lua_getfield(L, lua_upvalueindex(1), STR("playerLv"));
-    lua_pushstring(L, il2cpp_string_new(levelText.data()));
+    //lua_pushstring(L, il2cpp_string_new(levelText.data()));
+    lua_pushstring(L, il2cpp_string_new(const_cast<char*>(levelText.data())));
     lua_setfield(L, -2, STR("text"));
     lua_pop(L, 1);
 
@@ -406,7 +416,8 @@ int NBRSPExpManager(lua_State *L) {
         else expText.append(s);
     }
     lua_getfield(L, lua_upvalueindex(1), STR("playerExp"));
-    lua_pushstring(L, il2cpp_string_new(expText.data()));
+    //lua_pushstring(L, il2cpp_string_new(expText.data()));
+    lua_pushstring(L, il2cpp_string_new(const_cast<char*>(expText.data())));
     lua_setfield(L, -2, STR("text"));
     lua_pop(L, 1);
 
@@ -434,11 +445,13 @@ int wrapPRUIStaticFlush(lua_State *L) {
 
     if (config.Spoof.lv > 0) {
         std::string CoinMaxTxt = "MAX: " + std::to_string(config.Spoof.maxCoins);
-        lua_pushstring(L, il2cpp_string_new(CoinMaxTxt.data()));
+        //lua_pushstring(L, il2cpp_string_new(CoinMaxTxt.data()));
+        lua_pushstring(L, il2cpp_string_new(const_cast<char*>(CoinMaxTxt.data())));
         lua_setfield(L, 2, STR("text"));
 
         std::string OilMaxTxt = "MAX: " + std::to_string(config.Spoof.maxOil);
-        lua_pushstring(L, il2cpp_string_new(OilMaxTxt.data()));
+        //lua_pushstring(L, il2cpp_string_new(OilMaxTxt.data()));
+        lua_pushstring(L, il2cpp_string_new(const_cast<char*>(OilMaxTxt.data())));
         lua_setfield(L, 4, STR("text"));
     }
 
@@ -528,7 +541,8 @@ int wrapNBRSPUpdatePlayer(lua_State *L) {
     }
     lua_pop(L, 1);
     lua_getfield(L, 1, STR("playerName"));
-    lua_pushstring(L, il2cpp_string_new(newName.data()));
+    //lua_pushstring(L, il2cpp_string_new(newName.data()));
+    lua_pushstring(L, il2cpp_string_new(const_cast<char*>(newName.data())));
     lua_setfield(L, -2, STR("text"));
     lua_pop(L, 1);
 
