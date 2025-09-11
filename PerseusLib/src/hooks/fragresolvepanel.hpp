@@ -10,7 +10,8 @@ extern struct Config config;
 
 Il2CppString *stdstr2ilstr(std::string s);
 void percyLog(const char *fmt, ...);
-const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+//const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen);
 void lc_newclosuretable(lua_State *L, int idx);
 void lc_getupvalue(lua_State *L, int tidx, int level, int varid);
 void lc_add(lua_State *L, int idxa, int idxb);
