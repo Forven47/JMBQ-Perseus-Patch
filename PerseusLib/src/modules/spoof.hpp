@@ -12,7 +12,8 @@ extern struct Config config;
 
 Il2CppString *stdstr2ilstr(std::string s);
 void luaHookFunc(lua_State *L, std::string field, lua_CFunction func, std::string backup_prefix);
-const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+//const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen);
 void parseLv(lua_State *L, double input);
 void lc_newclosuretable(lua_State *L, int idx);
 void lc_getupvalue(lua_State *L, int tidx, int level, int varid);
