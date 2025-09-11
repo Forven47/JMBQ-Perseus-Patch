@@ -1263,7 +1263,12 @@ void *hack_thread(void *) {
         sleep(3);
     } while (!isLibraryLoaded(targetLibName));
 
-    percyLog(OBFUSCATE("hack_thread: target library %s loaded"), targetLibName);
+    {
+      std::string tname = tostr(targetLibName);
+      std::string msg = std::string("hack_thread: target library ") + tname + " loaded";
+      percyLog("%s", msg.c_str());
+    }
+    
 
     // load necessary functions
     loadil2cppfuncs();
