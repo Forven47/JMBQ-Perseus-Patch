@@ -42,7 +42,11 @@ std::map<int, int> skins;
 Config config;
 Il2CppImage *image;
 
-const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+//const char *lua_tolstring(lua_State *instance, int index, int &strLen);*/
+
+// modified: use size_t*
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen); 
+
 Il2CppString *stdstr2ilstr(std::string s) { return il2cpp_string_new((char *)s.c_str()); }
 
 void crash() {
@@ -181,10 +185,34 @@ void loadil2cppfuncs() {
     image = il2cpp_assembly_get_image(assembly);
 }
 
-Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
+/*Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
     void *iklass = il2cpp_class_from_name(image, namespaze, klass);
     MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
     return imethod->methodPointer;
+}
+*/
+
+// modified: safer, returns void*
+void *getFunctionAddress(char *namespaze, char *klass, char *method) { 
+    if (!image) {
+        percyLog(OBFUSCATE("getFunctionAddress: image == nullptr"));
+        return nullptr;
+    }
+    void *iklass = il2cpp_class_from_name(image, namespaze, klass);
+    if (!iklass) {
+        percyLog(OBFUSCATE("getFunctionAddress: il2cpp_class_from_name failed for %s.%s"), namespaze, klass);
+        return nullptr;
+    }
+    MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
+    if (!imethod) {
+        percyLog(OBFUSCATE("getFunctionAddress: il2cpp_class_get_method_from_name failed for %s.%s.%s"), namespaze, klass, method);
+        return nullptr;
+    }
+    if (!imethod->methodPointer) {
+        percyLog(OBFUSCATE("getFunctionAddress: methodPointer is null for %s.%s.%s"), namespaze, klass, method);
+        return nullptr;
+    }
+    return reinterpret_cast<void *>(imethod->methodPointer);
 }
 
 void loadluafuncs() {
@@ -564,8 +592,17 @@ int hookSendMsgExecute(lua_State *L) {
     lua_pushvalue(L, 2);
     lua_pcall(L, 1, 1, 0);
 
-    int siz = 0;
-    std::string msg(lua_tolstring(L, -1, siz));
+    //int siz = 0;
+    //std::string msg(lua_tolstring(L, -1, siz));
+
+    // modified: use size_t and pass pointer
+    size_t siz = 0; 
+    const char *s = lua_tolstring(L, -1, &siz);
+
+    std::string msg;
+    if (s && siz > 0) msg.assign(s, siz);
+    else if (s) msg = s;
+
     percyLog(OBFUSCATE("chatmsg: %s"), msg.c_str());
 
     std::string prefix(".");
@@ -1048,9 +1085,16 @@ int hookBUAddBuff(lua_State *L) {
     return 0;
 }
 
-const char *(*old_lua_tolstring)(lua_State *instance, int index, int &strLen);
+//const char *(*old_lua_tolstring)(lua_State *instance, int index, int &strLen);
 
-const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
+// modified: size_t*
+const char *(*old_lua_tolstring)(lua_State *instance, int index, size_t *strLen); 
+
+
+//const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
+
+// modified: size_t*
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen) { 
     if (instance && !exec) {
         exec = true;
         percyLog(OBFUSCATE("injecting"));
@@ -1105,7 +1149,9 @@ void *hack_thread(void *) {
     loadil2cppfuncs();
     loadluafuncs();
 
-    hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring);
+
+    //hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring);
+    hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring); // keep call, types updated
 
     return nullptr;
 }
