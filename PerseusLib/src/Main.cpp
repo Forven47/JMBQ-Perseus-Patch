@@ -45,7 +45,7 @@ Il2CppImage *image;
 //const char *lua_tolstring(lua_State *instance, int index, int &strLen);*/
 
 // modified: use size_t*
-const char *lua_tolstring(lua_State *instance, int index, size_t *strLen); 
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen);
 
 Il2CppString *stdstr2ilstr(std::string s) { return il2cpp_string_new((char *)s.c_str()); }
 
@@ -181,8 +181,32 @@ void loadil2cppfuncs() {
 
     // call the functions necessary to get the image
     Il2CppDomain *domain = il2cpp_domain_get();
+    if (!domain) {
+        percyLog(OBFUSCATE("loadil2cppfuncs: il2cpp_domain_get returned nullptr"));
+        return;
+    }
+    // try primary assembly first, but log attempts
+    percyLog(OBFUSCATE("loadil2cppfuncs: trying to open Assembly-CSharp"));
     Il2CppAssembly *assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp"));
-    image = il2cpp_assembly_get_image(assembly);
+    if (!assembly) {
+        percyLog(OBFUSCATE("loadil2cppfuncs: failed to open Assembly-CSharp, trying Assembly-CSharp-firstpass"));
+        assembly = il2cpp_domain_assembly_open(domain, OBFUSCATE("Assembly-CSharp-firstpass"));
+        if (!assembly) {
+            percyLog(OBFUSCATE("loadil2cppfuncs: failed to open Assembly-CSharp-firstpass too"));
+        } else {
+            percyLog(OBFUSCATE("loadil2cppfuncs: opened Assembly-CSharp-firstpass"));
+        }
+    } else {
+        percyLog(OBFUSCATE("loadil2cppfuncs: opened Assembly-CSharp"));
+    }
+
+    if (assembly) {
+        image = il2cpp_assembly_get_image(assembly);
+        percyLog(OBFUSCATE("loadil2cppfuncs: image resolved: %p"), image);
+    } else {
+        image = nullptr;
+        percyLog(OBFUSCATE("loadil2cppfuncs: could not resolve any assembly image"));
+    }
 }
 
 /*Il2CppMethodPointer *getFunctionAddress(char *namespaze, char *klass, char *method) {
@@ -192,17 +216,84 @@ void loadil2cppfuncs() {
 }
 */
 
-// modified: safer, returns void*
-void *getFunctionAddress(char *namespaze, char *klass, char *method) { 
-    if (!image) {
-        percyLog(OBFUSCATE("getFunctionAddress: image == nullptr"));
+// helper: try multiple assemblies/images to find a class
+void *try_find_class(const char *namespaze, const char *klass) {
+    if (!il2cpp_class_from_name) {
+        percyLog(OBFUSCATE("try_find_class: il2cpp_class_from_name is null"));
         return nullptr;
     }
-    void *iklass = il2cpp_class_from_name(image, namespaze, klass);
+
+    // 1) try using the currently bound image first
+    if (image) {
+        void *iklass = il2cpp_class_from_name(image, (char *)namespaze, (char *)klass);
+        if (iklass) {
+            percyLog(OBFUSCATE("try_find_class: found %s.%s in current image %p"), namespaze, klass, image);
+            return iklass;
+        } else {
+            percyLog(OBFUSCATE("try_find_class: not found %s.%s in current image %p"), namespaze, klass, image);
+        }
+    } else {
+        percyLog(OBFUSCATE("try_find_class: current image == nullptr"));
+    }
+
+    // 2) try some common alternative assemblies
+    const char *altAssemblies[] = {
+        "Assembly-CSharp-firstpass",
+        "Assembly-CSharp",
+        "Assembly-CSharp.dll",
+        "mscorlib",
+        "Assembly-UnityScript",
+        nullptr
+    };
+
+    Il2CppDomain *domain = nullptr;
+    if (il2cpp_domain_get) {
+        domain = il2cpp_domain_get();
+    }
+    if (!domain) {
+        percyLog(OBFUSCATE("try_find_class: il2cpp_domain_get returned nullptr"));
+        return nullptr;
+    }
+
+    for (int i = 0; altAssemblies[i] != nullptr; ++i) {
+        const char *a = altAssemblies[i];
+        percyLog(OBFUSCATE("try_find_class: trying assembly '%s' for class %s.%s"), a, namespaze, klass);
+        Il2CppAssembly *aobj = il2cpp_domain_assembly_open(domain, (char *)a);
+        if (!aobj) {
+            percyLog(OBFUSCATE("try_find_class: could not open assembly '%s'"), a);
+            continue;
+        }
+        Il2CppImage *img = il2cpp_assembly_get_image(aobj);
+        if (!img) {
+            percyLog(OBFUSCATE("try_find_class: assembly '%s' returned null image"), a);
+            continue;
+        }
+        void *iklass = il2cpp_class_from_name(img, (char *)namespaze, (char *)klass);
+        if (iklass) {
+            percyLog(OBFUSCATE("try_find_class: found %s.%s in assembly '%s' (image %p)"), namespaze, klass, a, img);
+            return iklass;
+        } else {
+            percyLog(OBFUSCATE("try_find_class: not found %s.%s in assembly '%s'"), namespaze, klass, a);
+        }
+    }
+
+    percyLog(OBFUSCATE("try_find_class: exhausted attempts for %s.%s"), namespaze, klass);
+    return nullptr;
+}
+
+// modified: safer, returns void*
+void *getFunctionAddress(char *namespaze, char *klass, char *method) {
+    if (!image) {
+        percyLog(OBFUSCATE("getFunctionAddress: image == nullptr"));
+        // still attempt try_find_class which will try other assemblies
+    }
+
+    void *iklass = try_find_class(namespaze, klass);
     if (!iklass) {
         percyLog(OBFUSCATE("getFunctionAddress: il2cpp_class_from_name failed for %s.%s"), namespaze, klass);
         return nullptr;
     }
+
     MethodInfo *imethod = il2cpp_class_get_method_from_name(iklass, method, -1);
     if (!imethod) {
         percyLog(OBFUSCATE("getFunctionAddress: il2cpp_class_get_method_from_name failed for %s.%s.%s"), namespaze, klass, method);
@@ -212,6 +303,7 @@ void *getFunctionAddress(char *namespaze, char *klass, char *method) {
         percyLog(OBFUSCATE("getFunctionAddress: methodPointer is null for %s.%s.%s"), namespaze, klass, method);
         return nullptr;
     }
+    percyLog(OBFUSCATE("getFunctionAddress: resolved %s.%s.%s -> %p"), namespaze, klass, method, imethod->methodPointer);
     return reinterpret_cast<void *>(imethod->methodPointer);
 }
 
@@ -253,7 +345,19 @@ void loadluafuncs() {
     lua_checkstack = (int (*)(lua_State *, int))GETLUAFUNC("lua_checkstack");
 
     luaL_getmetafield = (int (*)(lua_State *, int, Il2CppString *))GETLUAFUNC("luaL_getmetafield");
+
+    // Diagnostic logs for loaded lua functions (so you can see what's missing)
+    percyLog(OBFUSCATE("loadluafuncs: lua_newthread=%p lua_getfield=%p lua_tonumber=%p lua_tostring? (not loaded here)"),
+             (void *)lua_newthread, (void *)lua_getfield, (void *)lua_tonumber);
+
+    // For critical functions, log presence/absence
+    if (!lua_newthread) percyLog(OBFUSCATE("loadluafuncs: lua_newthread NOT found"));
+    if (!lua_getfield) percyLog(OBFUSCATE("loadluafuncs: lua_getfield NOT found"));
+    if (!lua_tonumber) percyLog(OBFUSCATE("loadluafuncs: lua_tonumber NOT found"));
+    if (!lua_pushcclosure) percyLog(OBFUSCATE("loadluafuncs: lua_pushcclosure NOT found"));
 }
+
+// ... (helper functions and mods remain unchanged) ...
 
 void replaceAttributeN(lua_State *L, Il2CppString *attribute, int number) {
     lua_pushnumber(L, number);
@@ -596,7 +700,7 @@ int hookSendMsgExecute(lua_State *L) {
     //std::string msg(lua_tolstring(L, -1, siz));
 
     // modified: use size_t and pass pointer
-    size_t siz = 0; 
+    size_t siz = 0;
     const char *s = lua_tolstring(L, -1, &siz);
 
     std::string msg;
@@ -616,6 +720,9 @@ int hookSendMsgExecute(lua_State *L) {
 }
 
 void luaHookFunc(lua_State *L, std::string field, lua_CFunction func, std::string backup_prefix) {
+    // Diagnostic: log attempted hook
+    percyLog(OBFUSCATE("luaHookFunc: attempting to hook '%s' (backup_prefix='%s')"), field.c_str(), backup_prefix.c_str());
+
     // place name of function to be hooked, in the form x.y.z, in a stringstream
     std::istringstream luaName(field);
 
@@ -632,11 +739,22 @@ void luaHookFunc(lua_State *L, std::string field, lua_CFunction func, std::strin
             break;
     }
 
+    // check if target is nil before hooking
+    int t = lua_type(L, -1);
+    if (t == 0 /*LUA_TNIL == 0*/ || t == LUA_TNIL) {
+        percyLog(OBFUSCATE("luaHookFunc: target '%s' is nil, cannot hook (lua_type=%d)"), field.c_str(), t);
+        // pop whatever we pushed
+        lua_pop(L, luaObjCount - 1);
+        return;
+    }
+
     lua_setfield(L, -2, il2cpp_string_new((char *)(backup_prefix + luaObj.data()).c_str()));
 
     lua_pushcfunction(L, func);
     lua_setfield(L, -2, il2cpp_string_new(luaObj.data()));
     lua_pop(L, luaObjCount - 1);
+
+    percyLog(OBFUSCATE("luaHookFunc: hooked '%s'"), field.c_str());
 }
 
 template <typename T> void luaReplaceAttribute(lua_State *L, const char *key, T val) {
@@ -699,7 +817,7 @@ int wvHook(lua_State *L) {
 void modMisc(lua_State *L) {
     lua_pushcfunction(L, wvHook);
     lua_setglobal(L, STR("wordVer"));
-    
+
     if (config.Misc.ExerciseGodmode) {
         lua_getfield(L, -1, STR("ConvertedBuff"));
         lua_getfield(L, -1, STR("buff_19"));
@@ -1088,13 +1206,13 @@ int hookBUAddBuff(lua_State *L) {
 //const char *(*old_lua_tolstring)(lua_State *instance, int index, int &strLen);
 
 // modified: size_t*
-const char *(*old_lua_tolstring)(lua_State *instance, int index, size_t *strLen); 
+const char *(*old_lua_tolstring)(lua_State *instance, int index, size_t *strLen);
 
 
 //const char *lua_tolstring(lua_State *instance, int index, int &strLen) {
 
 // modified: size_t*
-const char *lua_tolstring(lua_State *instance, int index, size_t *strLen) { 
+const char *lua_tolstring(lua_State *instance, int index, size_t *strLen) {
     if (instance && !exec) {
         exec = true;
         percyLog(OBFUSCATE("injecting"));
@@ -1145,13 +1263,31 @@ void *hack_thread(void *) {
         sleep(3);
     } while (!isLibraryLoaded(targetLibName));
 
+    percyLog(OBFUSCATE("hack_thread: target library %s loaded"), targetLibName);
+
     // load necessary functions
     loadil2cppfuncs();
+
+    if (!image) {
+        percyLog(OBFUSCATE("hack_thread: image is null after loadil2cppfuncs - hooks that rely on il2cpp may fail"));
+    } else {
+        percyLog(OBFUSCATE("hack_thread: image = %p"), image);
+    }
+
     loadluafuncs();
 
+    // Diagnostic: check whether lua_tolstring symbol resolves before trying to hook
+    void *lua_tolstring_addr = GETLUAFUNC("lua_tolstring");
+    percyLog(OBFUSCATE("hack_thread: diagnostic - lua_tolstring address = %p"), lua_tolstring_addr);
 
-    //hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring);
-    hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring); // keep call, types updated
+    if (!lua_tolstring_addr) {
+        percyLog(OBFUSCATE("hack_thread: lua_tolstring unresolved, skipping hook. Check getFunctionAddress logs for details."));
+    } else {
+        //hook((void *)GETLUAFUNC("lua_tolstring"), (void *)lua_tolstring, (void **)&old_lua_tolstring);
+        percyLog(OBFUSCATE("hack_thread: hooking lua_tolstring at %p"), lua_tolstring_addr);
+        hook((void *)lua_tolstring_addr, (void *)lua_tolstring, (void **)&old_lua_tolstring); // keep call, types updated
+        percyLog(OBFUSCATE("hack_thread: hook installed"));
+    }
 
     return nullptr;
 }
