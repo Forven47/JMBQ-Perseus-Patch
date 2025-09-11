@@ -2,6 +2,10 @@
 
 // full credit of everything in this file goes to cmdtaves
 
+#include <cstddef> // size_t
+#include <cstring>
+#include <string>
+
 #include "../Structs.h"
 
 extern struct Config config;
@@ -12,7 +16,7 @@ extern struct Config config;
 
 Il2CppString *stdstr2ilstr(std::string s);
 void luaHookFunc(lua_State *L, std::string field, lua_CFunction func, std::string backup_prefix);
-//const char *lua_tolstring(lua_State *instance, int index, int &strLen);
+/** const char *lua_tolstring(lua_State *instance, int index, int &strLen); **/
 const char *lua_tolstring(lua_State *instance, int index, size_t *strLen);
 void parseLv(lua_State *L, double input);
 void lc_newclosuretable(lua_State *L, int idx);
@@ -162,7 +166,7 @@ int wrapBDDRVSetFleetVO(lua_State *L) {
         lua_pushvalue(L, i);
     }
     if (isFriendly) {
-        int len;
+        /** int len;
         // override values
         lua_newtable(L);
         lua_getfield(L, 3, STR("name"));
@@ -186,6 +190,38 @@ int wrapBDDRVSetFleetVO(lua_State *L) {
         lua_pop(L, 1);
         lua_pushstring(L, il2cpp_string_new(newLevel.data()));
         lua_setfield(L, -2, STR("level"));
+        **/
+        // modified:
+        lua_newtable(L);
+        lua_getfield(L, 3, STR("name"));
+        lua_pop(L, 0); // keep stack shape; we'll read value below
+        size_t len = 0;
+        const char *s = lua_tolstring(L, -1, &len);
+        std::string newName;
+        if (!needNameSpoof) {
+            if (s) {
+                if (len > 0) newName.assign(s, len);
+                else newName = s;
+            } else newName.clear();
+        } else {
+            newName = config.Spoof.name;
+        }
+        lua_pop(L, 1);
+        lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        lua_setfield(L, -2, STR("name"));
+
+        lua_getfield(L, 3, STR("level"));
+        if (!needLevelSpoof) {
+            int levelNum = lua_tonumber(L, -1);
+            std::string newLevel = std::to_string(levelNum);
+            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_setfield(L, -2, STR("level"));
+        } else {
+            std::string newLevel = std::to_string(config.Spoof.lvInt);
+            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_setfield(L, -2, STR("level"));
+        }
+        lua_pop(L, 1);
     } else {
         lua_pushvalue(L, 3);
     }
@@ -206,7 +242,7 @@ int wrapBRLSetPlayer(lua_State *L) {
     lua_pushvalue(L, 1);
     // replace arg1 if spoofing needed
     if (needNameSpoof || needLevelSpoof) {
-        int len;
+        /** int len;
         lua_newtable(L);
         lua_getfield(L, 2, STR("name"));
         std::string newName;
@@ -243,6 +279,67 @@ int wrapBRLSetPlayer(lua_State *L) {
         // set player correctly
         lua_pushvalue(L, 2);
         lua_setfield(L, 1, STR("player"));
+        **/
+        // modified: safe usage with size_t and assign
+        size_t len = 0;
+        lua_newtable(L);
+
+        // name
+        lua_getfield(L, 2, STR("name"));
+        const char *sname = lua_tolstring(L, -1, &len);
+        std::string newName;
+        if (!needNameSpoof) {
+            if (sname) {
+                if (len > 0) newName.assign(sname, len);
+                else newName = sname;
+            } else newName.clear();
+        } else {
+            newName = config.Spoof.name;
+        }
+        lua_pop(L, 1);
+        lua_pushstring(L, il2cpp_string_new(newName.c_str()));
+        lua_setfield(L, -2, STR("name"));
+
+        // level
+        lua_getfield(L, 2, STR("level"));
+        if (!needLevelSpoof) {
+            const int levelNum = lua_tonumber(L, -1);
+            std::string newLevel = std::to_string(levelNum);
+            lua_pop(L, 1);
+            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_setfield(L, -2, STR("level"));
+        } else {
+            std::string newLevel = std::to_string(config.Spoof.lvInt);
+            lua_pop(L, 1);
+            lua_pushstring(L, il2cpp_string_new(newLevel.c_str()));
+            lua_setfield(L, -2, STR("level"));
+        }
+
+        // exp
+        lua_getfield(L, 2, STR("exp"));
+        if (!needLevelSpoof) {
+            size_t xplen = 0;
+            const char *sxp = lua_tolstring(L, -1, &xplen);
+            std::string newXP;
+            if (sxp) {
+                if (xplen > 0) newXP.assign(sxp, xplen);
+                else newXP = sxp;
+            } else newXP.clear();
+            lua_pop(L, 1);
+            lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            lua_setfield(L, -2, STR("exp"));
+        } else {
+            std::string newXP = std::to_string(config.Spoof.spoofXp);
+            lua_pop(L, 1);
+            lua_pushstring(L, il2cpp_string_new(newXP.c_str()));
+            lua_setfield(L, -2, STR("exp"));
+        }
+
+        lua_pcall(L, 2, 0, 0);
+
+        // set player correctly
+        lua_pushvalue(L, 2);
+        lua_setfield(L, 1, STR("player"));
     } else {
         lua_pushvalue(L, 2);
         lua_pcall(L, 2, 0, 0);
@@ -269,11 +366,24 @@ void increaseXp(lua_State *L, int increment) {
 
 int NBRSPExpManager(lua_State *L) {
 
-    int len;
+    /** int len;
     std::string levelText;
     levelText.assign((char *)OBFUSCATE("Lv."));
     lua_getfield(L, lua_upvalueindex(3), STR("level"));
     levelText += std::string(lua_tolstring(L, -1, len));
+    lua_pop(L, 1);
+    ...
+    expText += std::string(lua_tolstring(L, -1, len));
+    **/
+    size_t len = 0;
+    std::string levelText;
+    levelText.assign((char *)OBFUSCATE("Lv."));
+    lua_getfield(L, lua_upvalueindex(3), STR("level"));
+    const char *s = lua_tolstring(L, -1, &len);
+    if (s) {
+        if (len > 0) levelText.append(s, len);
+        else levelText.append(s);
+    }
     lua_pop(L, 1);
     lua_getfield(L, lua_upvalueindex(1), STR("playerLv"));
     lua_pushstring(L, il2cpp_string_new(levelText.data()));
@@ -289,7 +399,12 @@ int NBRSPExpManager(lua_State *L) {
 
     std::string expText;
     expText.assign((char *)OBFUSCATE("+"));
-    expText += std::string(lua_tolstring(L, -1, len));
+    len = 0;
+    s = lua_tolstring(L, -1, &len);
+    if (s) {
+        if (len > 0) expText.append(s, len);
+        else expText.append(s);
+    }
     lua_getfield(L, lua_upvalueindex(1), STR("playerExp"));
     lua_pushstring(L, il2cpp_string_new(expText.data()));
     lua_setfield(L, -2, STR("text"));
@@ -347,7 +462,8 @@ int wrapNBRSPUpdatePlayer(lua_State *L) {
     }
 
     // otherwise proceed
-    int len;
+    /** int len; **/
+    size_t len = 0;
 
     // get old player object
     lua_getfield(L, 1, STR("contextData"));
@@ -400,7 +516,13 @@ int wrapNBRSPUpdatePlayer(lua_State *L) {
     lua_pcall(L, 1, 1, 0);
     std::string newName;
     if (!needNameSpoof) {
-        newName.assign(lua_tolstring(L, -1, len));
+        /** newName.assign(lua_tolstring(L, -1, len)); **/
+        len = 0;
+        const char *s = lua_tolstring(L, -1, &len);
+        if (s) {
+            if (len > 0) newName.assign(s, len);
+            else newName = s;
+        } else newName.clear();
     } else {
         newName = config.Spoof.name;
     }
@@ -641,8 +763,19 @@ std::string getRealName(lua_State *L) {
     lua_gettable(L, -2);
     lua_insert(L, -2);
     lua_call(L, 1, 1);
-    int siz;
+    /** int siz;
     std::string name = lua_tolstring(L, -1, siz);
+    lua_pop(L, 1);
+    return name; **/
+    size_t siz = 0;
+    const char *s = lua_tolstring(L, -1, &siz);
+    std::string name;
+    if (s) {
+        if (siz > 0) name.assign(s, siz);
+        else name = s;
+    } else {
+        name.clear();
+    }
     lua_pop(L, 1);
     return name;
 }
@@ -653,7 +786,8 @@ int wrapRCupdate(lua_State *L) {
     bool needLevelSpoof = (config.Spoof.lv > 0);
     
     int type;
-    int siz;
+    /** int siz; **/
+    size_t siz;
     std::string name;
     
     lua_getglobal(L, STR("RankCard"));
@@ -667,7 +801,15 @@ int wrapRCupdate(lua_State *L) {
 
     lua_pushvalue(L, 2);
     lua_getfield(L, -1, STR("name"));
-    name = lua_tolstring(L, -1, siz);
+    /** name = lua_tolstring(L, -1, siz); **/
+    siz = 0;
+    const char *s = lua_tolstring(L, -1, &siz);
+    if (s) {
+        if (siz > 0) name.assign(s, siz);
+        else name = s;
+    } else {
+        name.clear();
+    }
     lua_pop(L, 1);
     
     percyLog(OBFUSCATE("name: %s, type: %d"), name.data(), type);
