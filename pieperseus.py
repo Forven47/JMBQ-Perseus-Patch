@@ -10,8 +10,10 @@ import logging
 import sys
 import re
 import datetime
+import requests
+import subprocess
 from subprocess import Popen, PIPE, STDOUT, run
-
+from pathlib import Path
 
 logging.basicConfig(
     format='%(asctime)s,%(msecs)03d %(levelname)-8s [%(filename)s:%(funcName)s:%(lineno)d] - %(message)s',
@@ -88,12 +90,52 @@ def get_version():
         pkg_version = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')
         logging.warning(f'Using UTC-now fallback version: {pkg_version}')
 
+def download_jmbq_perseus_lib():
+    repo_owner = "JMBQ"
+    repo_name = "azurlane"
+    asset_pattern = "MOD_MENU_"
+    extract_dir = Path("JMBQ-PerseusLib")
+    
+    try:
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
+        response = requests.get(api_url, timeout=10)
+        response.raise_for_status()
+        release_data = response.json()
+        target_asset = None
+        for asset in release_data.get("assets", []):
+            if asset_pattern in asset["name"] and asset["name"].endswith(".rar"):
+                target_asset = asset
+                break   
+        if not target_asset:
+            raise ValueError("cant find MOD_MENU rar")
 
+        download_url = target_asset["browser_download_url"]
+        temp_rar = Path(f"temp_{target_asset['name']}")
+        
+        with requests.get(download_url, stream=True, timeout=30) as r:
+            r.raise_for_status()
+            with open(temp_rar, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        
+        extract_dir.mkdir(exist_ok=True)
+        
+        result = subprocess.run(
+            ["rar", "x", str(temp_rar), f"{str(extract_dir)}"],
+            capture_output=True,
+            text=True
+        )
+        
+    finally:
+        if 'temp_rar' in locals() and temp_rar.exists():
+            temp_rar.unlink()
+
+
+'''
 def build_perseus_lib(do_clean=False):
     logging.info(f'{"cleaning" if do_clean else "building"} perseus libs')
 
-    # thx n0k0m3
-    os.chdir('PerseusLib')
+    os.chdir('JMBQ-PerseusLib')
 
     cmd = [f'ndk-build{".cmd" if is_windows() else ""}',
            'NDK_PROJECT_PATH=./src',
@@ -117,7 +159,7 @@ def build_perseus_lib(do_clean=False):
         exit(1)
 
     os.chdir('..')
-
+'''
 
 def extract_from_packages():
     if skip and os.path.isfile(f'{pkg}.apk'):
@@ -176,8 +218,7 @@ def decompile_apk():
 
 def copy_perseus_libs():
     logging.info('copying Perseus libs')
-    bbox(f'sh -c "cp -r ../PerseusLib/src/libs/* {pkg}/lib"')
-    #bbox(f'sh -c "cp -r ../lib/* {pkg}/lib"')
+    bbox(f'sh -c "cp -r ../JMBQ-PerseusLib/* {pkg}/"')
 
 
 def patch():
@@ -187,6 +228,7 @@ def patch():
 
 def rebuild():
     newpkg = f'{pkg}-{pkg_version}.JMBQ-patched.apk'
+    ''' 
     newzip = newpkg + '.zip'
     if quick_rebuild and os.path.isfile(newpkg):
         logging.info(f'rebuiling {pkg}.apk quickly')
@@ -208,6 +250,7 @@ def rebuild():
         shutil.move(newzip, newpkg)
 
         return
+    '''
 
     logging.info(f'rebuilding {pkg}.apk with apktool')
     os.system(f'java -jar {os.path.join(rootdir, "bin", "apktool.jar")} -q -f b {pkg} -o {newpkg}')
@@ -271,7 +314,8 @@ def main():
     quick_rebuild = args.quick_rebuild
 
     start = time.time()
-    build_perseus_lib()
+    download_jmbq_perseus_lib()
+    #build_perseus_lib()
     mkcd('apk_build')
     extract_from_packages()
     get_version()
@@ -283,7 +327,7 @@ def main():
     compress_libs()
     end = time.time()
 
-    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}-{pkg_version}.patched.apk')}")
+    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}-{pkg_version}.JMBQ-patched.apk')}")
     logging.info(f"done in {round(end - start, 2)} seconds")
 
 
