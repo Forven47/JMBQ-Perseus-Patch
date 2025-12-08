@@ -98,7 +98,7 @@ jobs:
       - name: Install Python deps (if any) and patch
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install request
+          python3 -m pip install requests
           python3 JMBQ-Perseus-Patch.py --no-skip
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
