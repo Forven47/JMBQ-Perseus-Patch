@@ -227,7 +227,7 @@ def patch():
 
 
 def rebuild():
-    newpkg = f'{pkg}-{pkg_version}.JMBQ-patched.apk'
+    newpkg = f'{pkg}-{pkg_version}-JMBQ-patched.apk'
     ''' 
     newzip = newpkg + '.zip'
     if quick_rebuild and os.path.isfile(newpkg):
@@ -257,7 +257,7 @@ def rebuild():
 
 
 def sign_apk():
-    f = f'{pkg}-{pkg_version}.JMBQ-patched.apk'
+    f = f'{pkg}-{pkg_version}-JMBQ-patched.apk'
     shutil.move(f, f + '.unsigned')
 
     logging.info('zipaligning apk')
@@ -327,7 +327,7 @@ def main():
     compress_libs()
     end = time.time()
 
-    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}-{pkg_version}.JMBQ-patched.apk')}")
+    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}-{pkg_version}-JMBQ-patched.apk')}")
     logging.info(f"done in {round(end - start, 2)} seconds")
 
 
