@@ -40,7 +40,9 @@ jobs:
       - name: Install system packages (7zip, unzip, jq, wget)
         run: |
           sudo apt-get update
-          sudo apt-get install -y p7zip-full unzip jq wget zip netcat-openbsd
+          sudo apt-get install -y tar p7zip-full unzip jq wget zip netcat-openbsd
+          sudo wget https://www.rarlab.com/rar/rarlinux-x64-6.0.2.tar.gz && tar -zxvf rarlinux-x64-6.0.2.tar.gz
+          sudo echo PATH=$PATH:./rar
 
       - name: Make repo bin/ executables and add to PATH
         run: |
