@@ -97,9 +97,6 @@ jobs:
       - name: Install Python deps (if any) and run pieperseus.py
         run: |
           python3 -m pip install --upgrade pip
-          # If your script requires any pip packages you can install them here:
-          # pip3 install <package>
-          # Run pieperseus.py from repository root (script expects to be run from repo root)
           python3 pieperseus.py --no-skip
         env:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
@@ -115,8 +112,6 @@ jobs:
             version=$(basename "$apkfile" | sed -E 's/.*-([0-9A-Za-z_.]+)\.patched\.apk/\1/')
             echo "Built apk: $apkfile"
             echo "PERSEUS_VERSION=$version" >> $GITHUB_ENV
-            pwd
-            ls -las PerseusLib/src/libs
           fi
 
       - name: Create Draft Release with APK(s)
@@ -127,5 +122,4 @@ jobs:
           draft: true
           title: "Perseus Release v${{ env.PERSEUS_VERSION }}"
           files: |
-            apk_build/*.patched.apk
-            apk_build/perseus_libs.zip
+            apk_build/*.JMBQ-patched.apk
