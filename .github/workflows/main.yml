@@ -1,4 +1,4 @@
-name: PiePerseus Build
+name: JMBQ-Perseus Build
 
 on:
   workflow_dispatch:
@@ -95,7 +95,7 @@ jobs:
           ls -lah packages || true
           ls -lah bin || true
 
-      - name: Install Python deps (if any) and run pieperseus.py
+      - name: Install Python deps (if any) and patch
         run: |
           python3 -m pip install --upgrade pip
           python3 JMBQ-Perseus-Patch.py --no-skip
@@ -121,6 +121,6 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
           draft: true
-          title: "Perseus Release v${{ env.PERSEUS_VERSION }}"
+          title: "JMBQ Perseus Release v${{ env.PERSEUS_VERSION }}"
           files: |
             apk_build/*.JMBQ-patched.apk
