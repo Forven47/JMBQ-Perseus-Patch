@@ -41,8 +41,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y tar p7zip-full unzip jq wget zip netcat-openbsd
-          sudo wget https://www.rarlab.com/rar/rarlinux-x64-6.0.2.tar.gz && tar -zxvf rarlinux-x64-6.0.2.tar.gz
-          sudo echo PATH=$PATH:./rar
 
       - name: Make repo bin/ executables and add to PATH
         run: |
@@ -88,6 +86,7 @@ jobs:
           which python3 || true
           python3 -V || true
           which 7zz || true
+          which rar || true
           which apkeep || true
           which apktool || true
           which zipalign || true
