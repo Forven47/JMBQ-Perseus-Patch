@@ -186,7 +186,7 @@ def patch():
 
 
 def rebuild():
-    newpkg = f'{pkg}-{pkg_version}.patched.apk'
+    newpkg = f'{pkg}-{pkg_version}.JMBQ-patched.apk'
     newzip = newpkg + '.zip'
     if quick_rebuild and os.path.isfile(newpkg):
         logging.info(f'rebuiling {pkg}.apk quickly')
@@ -214,7 +214,7 @@ def rebuild():
 
 
 def sign_apk():
-    f = f'{pkg}-{pkg_version}.patched.apk'
+    f = f'{pkg}-{pkg_version}.JMBQ-patched.apk'
     shutil.move(f, f + '.unsigned')
 
     logging.info('zipaligning apk')
