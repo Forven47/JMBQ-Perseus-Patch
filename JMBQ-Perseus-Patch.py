@@ -125,7 +125,7 @@ def download_jmbq_perseus_lib():
         asset_name = target_asset["name"]
         version_match = re.search(r"MOD_MENU_([\d\.]+)\.(rar|zip|7z)", asset_name)
         mod_version = version_match.group(1)
-        print(f"mod_version: {mod_version}")
+        logging.info(f"mod_version: {mod_version}")
 
         extract_dir.mkdir(exist_ok=True)
         suffix = Path(asset_name).suffix
