@@ -122,6 +122,6 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           automatic_release_tag: "latest"
           draft: true
-          title: "JMBQ Perseus Release v${{ env.PERSEUS_VERSION }}"
+          title: "V${{ env.PERSEUS_VERSION }} APK Patched"
           files: |
             apk_build/*patched.apk
