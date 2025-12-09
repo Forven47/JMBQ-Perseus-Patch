@@ -22,20 +22,22 @@ logging.basicConfig(
 
 pkg = 'com.bilibili.AzurLane'
 pkg_version = '0'
+mod_version = '0'
 rootdir = os.getcwd()
-
-skip = False
-quick_rebuild = False
+#skip = False
+#quick_rebuild = False
 
 
 def is_windows() -> bool:
     return os.name in ['nt']
 
 
+'''
 def mkcd(d):
     if not os.path.isdir(d):
         os.mkdir(d)
     os.chdir(d)
+'''
 
 
 def executable_path(e, absolute=True):
@@ -91,11 +93,13 @@ def get_version():
         logging.warning(f'Using UTC-now fallback version: {pkg_version}')
 
 def download_jmbq_perseus_lib():
+    global mod_version
     repo_owner = "JMBQ"
     repo_name = "azurlane"
     asset_pattern = "MOD_MENU_"
     extract_dir = Path("JMBQ-PerseusLib")
-    
+    suffix_to_cmd = {".rar": ["rar", "x", "-o+"],".zip": ["unzip", "-d"],".7z": ["7zz", "x", "-o"]}
+
     try:
         api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases/latest"
         response = requests.get(api_url, timeout=10)
@@ -103,32 +107,54 @@ def download_jmbq_perseus_lib():
         release_data = response.json()
         target_asset = None
         for asset in release_data.get("assets", []):
-            if asset_pattern in asset["name"] and asset["name"].endswith(".rar"):
+            if asset_pattern in asset["name"] and asset["name"].endswith((".rar", ".zip", ".7z")):
                 target_asset = asset
                 break   
         if not target_asset:
-            raise ValueError("cant find MOD_MENU rar")
+            raise ValueError("cant find MOD_MENU")
 
         download_url = target_asset["browser_download_url"]
-        temp_rar = Path(f"temp_{target_asset['name']}")
+        temp_file = Path(f"temp_{target_asset['name']}")
         
         with requests.get(download_url, stream=True, timeout=30) as r:
             r.raise_for_status()
-            with open(temp_rar, "wb") as f:
+            with open(temp_file, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
-        
+
+        asset_name = target_asset["name"]
+        version_match = re.search(r"MOD_MENU_([\d\.]+)\.(rar|zip|7z)", asset_name)
+        mod_version = version_match.group(1)
+        print(f"mod_version: {mod_version}")
+
         extract_dir.mkdir(exist_ok=True)
-        
+        suffix = Path(asset_name).suffix
+        cmd = suffix_to_cmd[suffix]
+
+        if suffix == ".zip":
+            cmd += [str(extract_dir), str(temp_file)]
+        elif suffix == ".7z":
+            cmd += [str(extract_dir), str(temp_file)]
+            subprocess.run(
+                ["mv", f"{str(extract_dir)}/*/*", str(extract_dir)],
+                capture_output=True,
+                text=True
+            )
+        else:
+            cmd += [str(temp_file), str(extract_dir)]
+
         result = subprocess.run(
-            ["rar", "x", str(temp_rar), f"{str(extract_dir)}"],
+            cmd,
             capture_output=True,
             text=True
         )
-        
+
+        if result.returncode != 0:
+            raise RuntimeError(f"{result.stderr}")
+                
     finally:
-        if 'temp_rar' in locals() and temp_rar.exists():
-            temp_rar.unlink()
+        if 'temp_file' in locals() and temp_file.exists():
+            temp_file.unlink()
 
 
 '''
@@ -162,9 +188,11 @@ def build_perseus_lib(do_clean=False):
 '''
 
 def extract_from_packages():
+    '''
     if skip and os.path.isfile(f'{pkg}.apk'):
         logging.info(f'{pkg}.apk already exists, skipping')
         return
+    '''
 
     logging.info('searching for package archives in packages/')
     # Prefer archives that start with the pkg name
@@ -206,10 +234,12 @@ def extract_from_packages():
 
 
 def decompile_apk():
+    '''
     if skip and os.path.isdir(pkg):
         logging.info(f'{pkg}.apk is already decompiled, skipping')
         return
-
+    '''
+        
     logging.info(f'decompiling {pkg}.apk')
     if os.path.isdir(pkg):
         shutil.rmtree(pkg)
@@ -227,7 +257,7 @@ def patch():
 
 
 def rebuild():
-    newpkg = f'{pkg}-{pkg_version}-JMBQ-patched.apk'
+    newpkg = f'{pkg}_{pkg_version}-JMBQ_{mod_version}-patched.apk'
     ''' 
     newzip = newpkg + '.zip'
     if quick_rebuild and os.path.isfile(newpkg):
@@ -257,7 +287,7 @@ def rebuild():
 
 
 def sign_apk():
-    f = f'{pkg}-{pkg_version}-JMBQ-patched.apk'
+    f = f'{pkg}_{pkg_version}-JMBQ_{mod_version}-patched.apk'
     shutil.move(f, f + '.unsigned')
 
     logging.info('zipaligning apk')
@@ -274,6 +304,7 @@ def sign_apk():
     os.remove(f'{f}.idsig')
 
 
+'''
 def compress_libs():
     logging.info('compressing Perseus libs into apk_build')
     libs_dir = os.path.join(rootdir, 'PerseusLib', 'src', 'libs')
@@ -291,9 +322,10 @@ def compress_libs():
                 zf.write(full, arcname)
 
     logging.info(f'Written libs archive: {out_zip}')
-
+'''
 
 def main():
+    '''    
     global skip, quick_rebuild
 
     parser = argparse.ArgumentParser(
@@ -312,11 +344,12 @@ def main():
 
     skip = args.skip
     quick_rebuild = args.quick_rebuild
+    '''
 
     start = time.time()
     download_jmbq_perseus_lib()
     #build_perseus_lib()
-    mkcd('apk_build')
+    #mkcd('apk_build')
     extract_from_packages()
     get_version()
     decompile_apk()
@@ -324,10 +357,10 @@ def main():
     patch()
     rebuild()
     sign_apk()
-    compress_libs()
+    #compress_libs()
     end = time.time()
 
-    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}-{pkg_version}-JMBQ-patched.apk')}")
+    #logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}_{pkg_version}-JMBQ_{mod_version}-patched.apk')}")
     logging.info(f"done in {round(end - start, 2)} seconds")
 
 
