@@ -104,15 +104,15 @@ jobs:
           ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
 
-      - name: Set PERSEUS_VERSION env from built apk filename
+      - name: Set JMBQ_PERSEUS_VERSION env from built apk filename
         run: |
-          apkfile=$(ls apk_build/*.patched.apk 2>/dev/null | head -n1 || true)
-          if [ -z "$apkfile" ]; then
-            echo "No apk found in apk_build/ - skipping PERSEUS_VERSION set"
+          libfile=$(ls temp_MOD_MENU* 2>/dev/null | head -n1 || true)
+          if [ -z "$libfile" ]; then
+            echo "No libfile found - skipping PERSEUS_VERSION set"
             echo "PERSEUS_VERSION=unknown" >> $GITHUB_ENV
           else
-            version=$(basename "$apkfile" | sed -E 's/.*-([0-9A-Za-z_.]+)\.patched\.apk/\1/')
-            echo "Built apk: $apkfile"
+            version=$(basename "$libfile" | cut -d'_' -f 4 | sed 's/\.[^.]*$//')
+            echo "Built lib file: $libfile"
             echo "PERSEUS_VERSION=$version" >> $GITHUB_ENV
           fi
 
