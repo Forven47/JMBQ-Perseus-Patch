@@ -32,12 +32,12 @@ def is_windows() -> bool:
     return os.name in ['nt']
 
 
-'''
+
 def mkcd(d):
     if not os.path.isdir(d):
         os.mkdir(d)
     os.chdir(d)
-'''
+
 
 
 def executable_path(e, absolute=True):
@@ -153,8 +153,9 @@ def download_jmbq_perseus_lib():
             raise RuntimeError(f"{result.stderr}")
                 
     finally:
-        if 'temp_file' in locals() and temp_file.exists():
-            temp_file.unlink()
+        logging.info('download complited.')
+        #if 'temp_file' in locals() and temp_file.exists():
+        #    temp_file.unlink()
 
 
 '''
@@ -349,7 +350,7 @@ def main():
     start = time.time()
     download_jmbq_perseus_lib()
     #build_perseus_lib()
-    #mkcd('apk_build')
+    mkcd('apk_build')
     extract_from_packages()
     get_version()
     decompile_apk()
@@ -360,7 +361,7 @@ def main():
     #compress_libs()
     end = time.time()
 
-    #logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}_{pkg_version}-JMBQ_{mod_version}-patched.apk')}")
+    logging.info(f"built apk in {os.path.join(rootdir, 'apk_build', f'{pkg}_{pkg_version}-JMBQ_{mod_version}-patched.apk')}")
     logging.info(f"done in {round(end - start, 2)} seconds")
 
 
