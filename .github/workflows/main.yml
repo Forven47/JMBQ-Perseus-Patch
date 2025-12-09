@@ -124,4 +124,4 @@ jobs:
           draft: true
           title: "JMBQ Perseus Release v${{ env.PERSEUS_VERSION }}"
           files: |
-            apk_build/*.JMBQ-patched.apk
+            apk_build/*patched.apk
